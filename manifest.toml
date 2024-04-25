@@ -4,7 +4,7 @@ builder = "exec:go"
 runner = "local:exec"
 
 [builders."docker:go"]
-enabled = true
+enabled = false
 go_version = "1.14"
 module_path = "github.com/your/module/name"
 exec_pkg = "."
@@ -14,13 +14,13 @@ enabled = true
 module_path = "github.com/your/module/name"
 
 [runners."local:docker"]
-enabled = true
+enabled = false
 
 [runners."local:exec"]
 enabled = true
 
 [runners."cluster:k8s"]
-enabled = true
+enabled = false
 
 [[testcases]]
 name= "test1"
@@ -39,31 +39,25 @@ instances = { min = 3, max = 50, default = 3 }
 
     fileSizeMB =  { type = "int", desc = "Size of file to upsert", unit = "MB", default=1000 }
 
+    getFileTimeout =  { type = "int", desc = "Maximum amount of time a file retrieval operation can take before failure.", unit = "time_seconds", default=240 }
+
 [[testcases]]
 name= "test2"
 instances = { min = 1, max = 50, default = 1 }
     [testcases.params]
     verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=true }
 
-    erasureEnabled = { type = "boolean", desc = "Use IPFS-Cluster with Erasure Coding enabled.", unit = "boolean", default=true }
+    erasureEnabled = { type = "boolean", desc = "Use IPFS-Cluster with Erasure Coding enabled.", unit = "boolean", default=false }
 
-    shutdownProbability = { type = "float", desc = "Shutdown Probability", unit = "percentage", default=1.0 }
-
-    # Every 2 minutes, any given node has a shutdown probability of 25%
-    failureStateEntryCadence = { type = "int", desc = "Determines how often the system may triggers failure scenarios, such as node shutdowns.", unit = "time_minutes", default=1 }
+    shutdownProbability = { type = "float", desc = "Shutdown Probability", unit = "percentage", default=0.25 }
 
     maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "time_minutes", default=5 }
 
-    fileUpsertCadence =  { type = "int", desc = "Maximum Node Runtime", unit = "time_seconds", default=10 }
 
     fileUpsertTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=180 }
 
     maxFiles = { type = "int", desc = "Maximum # of files to upsert.", unit = "time_seconds", default=1 }
 
     fileSizeMB =  { type = "int", desc = "Size of file to upsert", unit = "MB", default=50 }
-# Add more testcases here...
-# [[testcases]]
-# name = "another"
-# instances = { min = 1, max = 1, default = 1 }
-#   [testcase.params]
-#   param1 = { type = "int", desc = "an integer", unit = "units", default = 3 }
+
+    getFileTimeout =  { type = "int", desc = "Maximum amount of time a file retrieval operation can take before failure.", unit = "time_seconds", default=240 }
