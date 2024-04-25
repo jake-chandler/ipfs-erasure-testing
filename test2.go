@@ -9,8 +9,8 @@ import (
 	"github.com/testground/sdk-go/run"
 	runtime "github.com/testground/sdk-go/runtime"
 	"github.com/testground/sdk-go/sync"
-	ipfsclusterhelper "github.com/your/module/name/compose_file_generator"
 	filegenerator "github.com/your/module/name/file_generator"
+	ipfsclusterpeer "github.com/your/module/name/ipfs-cluster-peer"
 	"github.com/your/module/name/monitor"
 )
 
@@ -33,7 +33,7 @@ const (
 )
 
 // Peer 2...N logic
-func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, shutdownProb float64, clusterHelper *ipfsclusterhelper.IpfsClusterPeerHelper, client sync.Client) error {
+func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, shutdownProb float64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
 
 	alreadyShutdown := false
 
@@ -61,7 +61,7 @@ func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum 
 }
 
 // Peer 1 logic
-func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterhelper.IpfsClusterPeerHelper) {
+func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterpeer.IpfsClusterPeer) {
 	fg := filegenerator.New()
 	maxFiles := runenv.IntParam("maxFiles")
 	fileSizeMB := runenv.IntParam("fileSizeMB")
@@ -83,7 +83,7 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterh
 		start := time.Now()
 		// insert the generated file
 		runenv.RecordMessage("File %s:%dMB inserting...", fileName, fileSizeMB)
-		ecfile, err := clusterHelper.AddFileToCluster(fileName)
+		ecfile, err := clusterHelper.PinFile(fileName)
 		duration := time.Since(start)
 		if err != nil {
 			runenv.RecordMessage("error inserting file to cluster: %s... waiting 1 minute to try again", err)
@@ -100,12 +100,12 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterh
 		}
 
 	}
-	if runtimeMonitor.IsDebug() {
-		err := clusterHelper.PrintPinnedFiles("/home/jake/pinned_files_pre_shutdown.csv")
-		if err != nil {
-			runtimeMonitor.Debug("Error Getting Pinned Files")
-		}
-	}
+	// if runtimeMonitor.IsDebug() {
+	// 	err := clusterHelper.PrintPinnedFiles("/home/jake/pinned_files_pre_shutdown.csv")
+	// 	if err != nil {
+	// 		runtimeMonitor.Debug("Error Getting Pinned Files")
+	// 	}
+	// }
 	filesinsertedState := sync.State("filesinserted")
 	client.SignalEntry(ctx, filesinsertedState)
 
@@ -131,12 +131,12 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterh
 		}
 	}
 
-	if runtimeMonitor.IsDebug() {
-		err := clusterHelper.PrintPinnedFiles("/home/jake/pinned_files_post_shutdown.csv")
-		if err != nil {
-			runtimeMonitor.Debug("Error Getting Pinned Files")
-		}
-	}
+	// if runtimeMonitor.IsDebug() {
+	// 	err := clusterHelper.PrintPinnedFiles("/home/jake/pinned_files_post_shutdown.csv")
+	// 	if err != nil {
+	// 		runtimeMonitor.Debug("Error Getting Pinned Files")
+	// 	}
+	// }
 	client.SignalEntry(ctx, filesinsertedState)
 
 }

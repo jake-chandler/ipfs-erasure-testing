@@ -9,7 +9,7 @@ import (
 	"github.com/testground/sdk-go/run"
 	runtime "github.com/testground/sdk-go/runtime"
 	"github.com/testground/sdk-go/sync"
-	ipfsclusterhelper "github.com/your/module/name/compose_file_generator"
+	ipfsclusterpeer "github.com/your/module/name/ipfs-cluster-peer"
 	"github.com/your/module/name/monitor"
 )
 
@@ -28,7 +28,7 @@ var (
 // grab the first peer's IPFS Peer ID - we will bootstrap into Peer 1.
 // blocking call - wait for peer to be boostrapped in ipfs
 // Publish the IPFS Peer ID so other test nodes can reference it.
-func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledState sync.State, runenv *runtime.RunEnv) (*ipfsclusterhelper.IpfsClusterPeerHelper, error) {
+func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledState sync.State, runenv *runtime.RunEnv) (*ipfsclusterpeer.IpfsClusterPeer, error) {
 	client = initCtx.SyncClient
 
 	peerNum = client.MustSignalEntry(ctx, enrolledState)
@@ -55,7 +55,7 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 		peer1Id = <-peerChan
 	}
 
-	clusterHelper, err := ipfsclusterhelper.New(int(peerNum), runenv, peer1Id)
+	clusterHelper, err := ipfsclusterpeer.New(int(peerNum), runenv, peer1Id)
 	if err != nil {
 		runenv.RecordMessage("Failure creating IPFS Cluster Helper")
 		runenv.RecordFailure(err)
@@ -87,7 +87,7 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 	return clusterHelper, nil
 }
 
-func shutDownPeer(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterhelper.IpfsClusterPeerHelper, client sync.Client) error {
+func shutDownPeer(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
 	runenv.RecordMessage("Peer #%d is shutting down...", peerNum)
 	err := clusterHelper.StopNode()
 	if err != nil {

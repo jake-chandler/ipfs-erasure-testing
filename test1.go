@@ -8,8 +8,8 @@ import (
 	"github.com/testground/sdk-go/run"
 	runtime "github.com/testground/sdk-go/runtime"
 	"github.com/testground/sdk-go/sync"
-	ipfsclusterhelper "github.com/your/module/name/compose_file_generator"
 	filegenerator "github.com/your/module/name/file_generator"
+	ipfsclusterpeer "github.com/your/module/name/ipfs-cluster-peer"
 	"github.com/your/module/name/monitor"
 )
 
@@ -28,7 +28,7 @@ const (
 	FailurePlanStep_StartupComplete  = 4
 )
 
-func enterFailureStepPlan(runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterhelper.IpfsClusterPeerHelper, client sync.Client) error {
+func enterFailureStepPlan(runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
 	enterFailureState := sync.State(fmt.Sprintf("Peer%dShutdown", peerNum))
 	// wait for peer # 1 to signal this peer to shut down
 	<-client.MustBarrier(ctx, enterFailureState, FailurePlanStep_InitiateShutdown).C
@@ -152,7 +152,7 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		start := time.Now()
 		// insert the generated file
 		runenv.RecordMessage("File %s:%dMB inserting...", fileName, fileSizeMB)
-		ecfile, err := clusterHelper.AddFileToCluster(fileName)
+		ecfile, err := clusterHelper.PinFile(fileName)
 		duration := time.Since(start)
 		if err != nil {
 			// met.RecordPoint("FileSizeMb", float64(fileSizeMB))
