@@ -36,8 +36,8 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 	var peer1Id string = ""
 	if peerNum > 1 {
 
-		lastPeerBootstrappedState := sync.State(fmt.Sprintf("peer_%d_bootstrapped", 1))
-		err := <-client.MustBarrier(ctx, lastPeerBootstrappedState, 1).C
+		peer1BootstapState := sync.State(fmt.Sprintf("peer_%d_bootstrapped", 1))
+		err := <-client.MustBarrier(ctx, peer1BootstapState, 1).C
 		if err != nil {
 			runenv.RecordMessage("Failure creating Compose File Generator")
 			runenv.RecordFailure(err)
@@ -53,6 +53,9 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 			return nil, err
 		}
 		peer1Id = <-peerChan
+		if peer1Id == "" {
+			return nil, fmt.Errorf("peer 1 failed to initialize")
+		}
 	}
 
 	clusterHelper, err := ipfsclusterpeer.New(int(peerNum), runenv, peer1Id)
@@ -66,7 +69,11 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 	runenv.RecordMessage("Waiting for Peer ID...")
 
 	peerID := <-*clusterHelper.PeerIdChannel
-	runenv.RecordMessage("Peer %d initialized successfully with Peer ID: %s", peerNum, peerID)
+	if peerID != "" {
+		runenv.RecordMessage("Peer %d initialized successfully with Peer ID: %s", peerNum, peerID)
+	} else {
+		runenv.RecordMessage("Peer %d failed to initialized", peerNum)
+	}
 
 	topic := fmt.Sprintf("peer_%d_id", peerNum)
 	client.MustPublish(ctx, sync.NewTopic(topic, reflect.TypeOf(peerID)), peerID)
@@ -75,7 +82,9 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 	allBootstrappedState := sync.State("boostrapped_count")
 	client.MustSignalEntry(ctx, bootstrappedstate)
 	client.MustSignalEntry(ctx, allBootstrappedState)
-
+	if peerID == "" {
+		return nil, fmt.Errorf("peer ID is blank")
+	}
 	runenv.RecordMessage("Peer %d is waiting for all peers to bootstrap...", peerNum)
 	err = <-client.MustBarrier(ctx, allBootstrappedState, runenv.TestInstanceCount).C
 	if err != nil {
