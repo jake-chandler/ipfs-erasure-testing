@@ -2,14 +2,17 @@ package filegenerator
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/testground/sdk-go/runtime"
 )
 
-const TEMP = "/home/jake/tmp/"
+var TEMP string
 
 // FileGenerator provides functionality to generate a file with Lorem Ipsum style content.
 type FileGenerator struct {
@@ -17,7 +20,21 @@ type FileGenerator struct {
 
 // NewFileGenerator creates a new instance of FileGenerator.
 func New() *FileGenerator {
+	TEMP = runtime.CurrentRunEnv().StringParam("tempFileDir")
+	if TEMP == "" {
+		TEMP = "tmp/"
+	}
+	// Check if TEMP directory exists, create it if it doesn't
+	if _, err := os.Stat(TEMP); os.IsNotExist(err) {
+		if err := os.MkdirAll(TEMP, 0755); err != nil {
+			log.Printf("Error Creating Temp File Directory...")
+		}
+	}
 	return &FileGenerator{}
+}
+
+func (fg *FileGenerator) TearDown() {
+	os.RemoveAll(TEMP)
 }
 
 // randomString generates a random string of the specified length.

@@ -60,6 +60,7 @@ func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum 
 // Peer 1 logic
 func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterpeer.IpfsClusterPeer) {
 	fg := filegenerator.New()
+	defer fg.TearDown()
 	maxFiles := runenv.IntParam("maxFiles")
 	fileSizeMB := runenv.IntParam("fileSizeMB")
 	fileSizeIncreaseScale := runenv.IntParam("fileSizeIncrease")

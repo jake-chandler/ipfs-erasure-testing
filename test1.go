@@ -187,6 +187,7 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		*/
 		fileSizeMB := runenv.IntParam("fileSizeMB")
 		fg := filegenerator.New()
+		defer fg.TearDown()
 		// Generate a random file with a name and size in MB
 		fileName := fg.GenerateFilename()
 		fileName, err := fg.GenerateFile(fileName, fileSizeMB)
