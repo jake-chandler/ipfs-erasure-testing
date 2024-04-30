@@ -28,7 +28,7 @@ var (
 // grab the first peer's IPFS Peer ID - we will bootstrap into Peer 1.
 // blocking call - wait for peer to be boostrapped in ipfs
 // Publish the IPFS Peer ID so other test nodes can reference it.
-func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledState sync.State, runenv *runtime.RunEnv) (*ipfsclusterpeer.IpfsClusterPeer, error) {
+func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledState sync.State, runenv *runtime.RunEnv) (ipfsclusterpeer.ClusterPeer, error) {
 	client = initCtx.SyncClient
 
 	peerNum = client.MustSignalEntry(ctx, enrolledState)
@@ -58,17 +58,16 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 		}
 	}
 
-	clusterHelper, err := ipfsclusterpeer.New(int(peerNum), runenv, peer1Id)
+	clusterHelper, err := ipfsclusterpeer.NewExecClusterPeer(int(peerNum), runenv, peer1Id)
 	if err != nil {
 		runenv.RecordMessage("Failure creating IPFS Cluster Helper")
 		runenv.RecordFailure(err)
 		return nil, err
 	}
 	runenv.RecordMessage("Peer #%d Inititalizing", peerNum)
-	go clusterHelper.LaunchNode()
 	runenv.RecordMessage("Waiting for Peer ID...")
 
-	peerID := <-*clusterHelper.PeerIdChannel
+	peerID := clusterHelper.LaunchNode()
 	if peerID != "" {
 		runenv.RecordMessage("Peer %d initialized successfully with Peer ID: %s", peerNum, peerID)
 	} else {
@@ -96,7 +95,7 @@ func bootstrapAllPeers(ctx context.Context, initCtx *run.InitContext, enrolledSt
 	return clusterHelper, nil
 }
 
-func shutDownPeer(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
+func shutDownPeer(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, clusterHelper ipfsclusterpeer.ClusterPeer, client sync.Client) error {
 	runenv.RecordMessage("Peer #%d is shutting down...", peerNum)
 	err := clusterHelper.StopNode()
 	if err != nil {

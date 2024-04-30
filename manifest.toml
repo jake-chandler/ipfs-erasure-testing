@@ -26,7 +26,7 @@ enabled = false
 name= "test1"
 instances = { min = 3, max = 50, default = 3 }
     [testcases.params]
-    # tempFileDir = { type="string" , desc = "Absolute path to a temp file directory", unit="filepath", default="/home/jake/tmp/"}
+    tempFileDir = { type="string" , desc = "Absolute path to a temp file directory", unit="filepath", default="/home/jake/ipfs-erasure-testing/tmp/"}
 
     verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=false }
     tearDown = { type = "boolean", desc = "shut down nodes before test termination. typically set to false during debugging", unit = "boolean", default=true }
@@ -43,7 +43,7 @@ instances = { min = 3, max = 50, default = 3 }
 name= "test2"
 instances = { min = 1, max = 50, default = 3 }
     [testcases.params]
-    # tempFileDir = { type="string" , desc = "Absolute path to a temp file directory", unit="filepath", default="/home/jake/tmp/"}
+    tempFileDir = { type="string" , desc = "Absolute path to a temp file directory", unit="filepath", default="/home/jake/ipfs-erasure-testing/tmp/"}
     verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=true }
 
     erasureEnabled = { type = "boolean", desc = "Use IPFS-Cluster with Erasure Coding enabled.", unit = "boolean", default=true }
@@ -53,7 +53,7 @@ instances = { min = 1, max = 50, default = 3 }
     maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "minutes", default=5 }
     clearIpfsCacheTimeout = { type = "int", desc = "Maximum Node Runtime", unit = "seconds", default=60 }
 
-    filePinTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=180 }
+    filePinTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=300 }
 
     maxFiles = { type = "int", desc = "Maximum # of files to upsert.", unit = "time_seconds", default=2 }
 
@@ -66,7 +66,7 @@ instances = { min = 1, max = 50, default = 3 }
 name= "onlybootstrap"
 instances = { min = 1, max = 50, default = 3 }
     [testcases.params]
-    # tempFileDir = { type="string" , desc = "Absolute path to a temp file directory", unit="filepath", default="/home/jake/tmp/"}
+    tempFileDir = { type="string" , desc = "Absolute path to a temp file directory", unit="filepath", default="/home/jake/ipfs-erasure-testing/tmp/"}
     verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=true }
     maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "minutes", default=5 }
     tearDown = { type = "boolean", desc = "shut down nodes before test termination. typically set to false during debugging", unit = "verbose", default=true }

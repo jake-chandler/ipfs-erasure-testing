@@ -49,7 +49,7 @@ func mustBarrierWithFailureState(state sync.State, target int, duration time.Dur
 	}
 }
 
-func enterFailureStepPlan(runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
+func enterFailureStepPlan(runenv *runtime.RunEnv, peerNum int64, clusterHelper ipfsclusterpeer.ClusterPeer, client sync.Client) error {
 	enterFailureState := sync.State(fmt.Sprintf("Peer%dShutdown", peerNum))
 	// wait for peer # 1 to signal this peer to shut down
 	maxTimeout := runtimeMonitor.MaxRuntime - runtimeMonitor.GetElapsedTime()

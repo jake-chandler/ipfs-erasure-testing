@@ -33,7 +33,7 @@ const (
 )
 
 // Peer 2...N logic
-func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, shutdownProb float64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
+func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, shutdownProb float64, clusterHelper ipfsclusterpeer.ClusterPeer, client sync.Client) error {
 	if runtimeMonitor.IsCancel() {
 		runenv.RecordMessage("Peer #%d: Max Runtime Exceed", peerNum)
 		return nil
@@ -58,7 +58,7 @@ func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum 
 }
 
 // Peer 1 logic
-func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterpeer.IpfsClusterPeer) {
+func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper ipfsclusterpeer.ClusterPeer) {
 	fg := filegenerator.New()
 	defer fg.TearDown()
 	maxFiles := runenv.IntParam("maxFiles")
@@ -69,7 +69,7 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterp
 	for i := 0; i < maxFiles; i++ {
 		// Check if the maximum runtime has been exceeded
 		if runtimeMonitor.IsCancel() {
-			runenv.RecordMessage("Peer #%d: Max Runtime Exceed", clusterHelper.PeerNumber)
+			runenv.RecordMessage("Peer #%d: Max Runtime Exceed", clusterHelper.GetPeerNumber())
 			break
 		}
 		// Generate a random file with a name and size in MB
@@ -86,11 +86,10 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterp
 		duration := time.Since(start)
 		if err != nil {
 			if runtimeMonitor.IsCancel() {
-				runenv.RecordMessage("Peer #%d: Max Runtime Exceed", clusterHelper.PeerNumber)
+				runenv.RecordMessage("Peer #%d: Max Runtime Exceed", clusterHelper.GetPeerNumber())
 				break
 			}
-			runenv.RecordMessage("error inserting file to cluster: %s... waiting 1 minute to try again", err)
-			time.Sleep(1 * time.Minute)
+			runenv.RecordMessage("error inserting file to cluster: %s. skipping this file.", err)
 		} else {
 			runenv.RecordMessage("File %s inserted successfully in %s", fileName, duration.String())
 			totalFilesInserted += 1

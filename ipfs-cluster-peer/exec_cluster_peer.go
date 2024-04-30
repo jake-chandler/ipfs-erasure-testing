@@ -14,7 +14,7 @@ import (
 	"github.com/testground/sdk-go/runtime"
 )
 
-type IpfsClusterPeer struct {
+type ExecClusterPeer struct {
 	PeerNumber int
 	Template   string // Template field to store the compose template content
 
@@ -26,147 +26,29 @@ type IpfsClusterPeer struct {
 	erasureEnabled bool
 }
 
-// New creates a new IpfsClusterPeerHelper instance - if bootstrap id is blank/nil, we are assumed to be the first peer
-func New(peerNumber int, runenv *runtime.RunEnv, bootstrapId string) (*IpfsClusterPeer, error) {
-	if peerNumber != 1 && bootstrapId == "" {
-		return nil, fmt.Errorf("peer %d requires a bootstrapId", peerNumber)
-	}
-	// Read the template file
-	var bootstrapOnId string = bootstrapId
-	var templateContent string
-	if peerNumber == 1 {
-		templateContent = ComposeTempaltePeer0
-	} else {
-		templateContent = ComposeTemplatePeerN
-	}
-	c := make(chan string)
-	return &IpfsClusterPeer{
-		PeerNumber:     peerNumber,
-		Template:       string(templateContent),
-		runenv:         runenv,
-		PeerIdChannel:  &c,
-		bootstrapOnId:  bootstrapOnId,
-		erasureEnabled: runenv.BooleanParam("erasureEnabled"),
-	}, nil
+func (c ExecClusterPeer) GetPeerNumber() int {
+	return c.PeerNumber
 }
-
-// GenerateComposeFile generates a Docker Compose file content based on the peer number
-func (c *IpfsClusterPeer) GenerateComposeFile() error {
-	composeContent := strings.ReplaceAll(c.Template, "{{PEER_NUMBER}}", strconv.Itoa(c.PeerNumber))
-	composeContent = strings.ReplaceAll(composeContent, "{{PEER_IPFS_PORT}}", strconv.Itoa(c.GetPeerIpfsPort()))
-	composeContent = strings.ReplaceAll(composeContent, "{{PEER_CLUSTER_PORT}}", strconv.Itoa(c.GetPeerClusterPort()))
-	composeContent = strings.ReplaceAll(composeContent, "{{PEER_SWARM_PORT}}", strconv.Itoa(c.GetPeerSwarmPort()))
-	composeContent = strings.ReplaceAll(composeContent, "{{PEER_GATEWAY_PORT}}", strconv.Itoa(c.GetPeerGatewayPort()))
-
-	var imageName string = "ipfs/ipfs-cluster:latest"
-	if c.erasureEnabled {
-		imageName = "ipfs-cluster-erasure:latest"
-	}
-	composeContent = strings.ReplaceAll(composeContent, "$IMAGE_NAME$", imageName)
-	if c.bootstrapOnId != "" {
-		peer := fmt.Sprintf("/dns4/%s/tcp/9096/ipfs/%s", fmt.Sprintf("cluster%d", 1), c.bootstrapOnId)
-		composeContent = strings.ReplaceAll(composeContent, "{{BOOTSTRAP_PEER}}", peer)
-	}
-
-	return c.writeToFile(composeContent)
-}
-
-// the directory name where this peer's docker-compose.yml file will live
-func (c *IpfsClusterPeer) GetPeerDockerDirectory() string {
-	return fmt.Sprintf("peer%d", c.PeerNumber)
-}
-
-func (c *IpfsClusterPeer) GetIpfsContainerName() string {
+func (c ExecClusterPeer) GetIpfsContainerName() string {
 	return fmt.Sprintf("ipfs%d", c.PeerNumber)
 }
-func (c *IpfsClusterPeer) GetClusterContainerName() string {
+func (c ExecClusterPeer) GetClusterContainerName() string {
 	return fmt.Sprintf("cluster%d", c.PeerNumber)
 }
-func (c *IpfsClusterPeer) getAnyPort(base int) int {
-	// Ensure peerNumber is within the range of 1 to 99
-	subport := (c.PeerNumber + 99) % 100
-	// Add a base port number to the peerNumber to get a unique port
-	port := base + subport
-	return port + 1
-}
-func (c *IpfsClusterPeer) GetPeerIpfsPort() int {
+
+func (c ExecClusterPeer) GetPeerIpfsPort() int {
 	return c.getAnyPort(5000)
 }
-func (c *IpfsClusterPeer) GetPeerClusterPort() int {
+func (c ExecClusterPeer) GetPeerClusterPort() int {
 	return c.getAnyPort(9000)
 }
-func (c *IpfsClusterPeer) GetPeerGatewayPort() int {
+func (c ExecClusterPeer) GetPeerGatewayPort() int {
 	return c.getAnyPort(8000)
 }
-func (c *IpfsClusterPeer) GetPeerSwarmPort() int {
+func (c ExecClusterPeer) GetPeerSwarmPort() int {
 	return c.getAnyPort(4000)
 }
-
-// writeToFile writes the generated compose content to a file named docker-compose.yml in a directory named after the peer number
-func (c *IpfsClusterPeer) writeToFile(content string) error {
-	// Create a directory named after the peer number
-	dirName := c.GetPeerDockerDirectory()
-	if err := os.MkdirAll(dirName, 0755); err != nil {
-		return err
-	}
-	// if c.runenv.RunParams.BooleanParam("verbose") {
-	// 	c.runenv.RecordMessage(content)
-	// } // Write the compose content to docker-compose.yml in the created directory
-	return os.WriteFile(fmt.Sprintf("%s/docker-compose.yml", dirName), []byte(content), 0644)
-}
-
-// extractPeerID extracts the peer ID from a line that contains "IPFS is ready. Peer ID" pattern
-func extractPeerID(line string) string {
-	// Split the line by spaces
-	parts := strings.Split(line, " ")
-	for i, part := range parts {
-		// Check if the current part is "Peer" and the next part exists
-		if part == "ID:" && i+1 < len(parts) {
-			return strings.TrimSpace(parts[i+1]) // Return the next part (peer ID)
-		}
-	}
-	return ""
-}
-func getContainerIDByName(containerName string) (string, error) {
-	// Run `docker ps -aq --filter "name=<containerName>"` to get the container ID
-	cmd := exec.Command("docker", "ps", "-aq", "--filter", "name="+containerName)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	// Trim any leading or trailing whitespace from the output
-	containerID := strings.TrimSpace(string(output))
-
-	if containerID == "" {
-		return "", fmt.Errorf("container '%s' not found", containerName)
-	}
-
-	return containerID, nil
-}
-
-func killContainer(containerName string) error {
-	// Get the ID of the container by name
-	containerID, err := getContainerIDByName(containerName)
-	if err != nil {
-		return err
-	}
-
-	// Kill the container using `docker kill <containerID>`
-	cmd := exec.Command("docker", "kill", containerID)
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	// Delete the container using `docker rm <containerID>`
-	cmd = exec.Command("docker", "rm", containerID)
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	return nil
-}
-func (c *IpfsClusterPeer) TearDown() error {
+func (c ExecClusterPeer) TearDown() error {
 	c.runenv.RecordMessage("Peer %d: Tearing Down", c.PeerNumber)
 	for _, containerName := range []string{c.GetClusterContainerName(), c.GetIpfsContainerName()} {
 		if err := killContainer(containerName); err != nil {
@@ -181,13 +63,13 @@ func (c *IpfsClusterPeer) TearDown() error {
 	return nil
 }
 
-func (c *IpfsClusterPeer) LaunchNode() error {
-	err := c.GenerateComposeFile()
+func (c ExecClusterPeer) launchNodeImpl() error {
+	err := c.generateComposeFile()
 	if err != nil {
 		c.runenv.RecordMessage("Failure generating compose file")
 		return err
 	}
-	err = os.Chdir(c.GetPeerDockerDirectory())
+	err = os.Chdir(c.getPeerDockerDirectory())
 	if err != nil {
 		return err
 	}
@@ -239,44 +121,13 @@ func (c *IpfsClusterPeer) LaunchNode() error {
 	}
 	return nil
 }
-
-func stopOrStartContainerByName(containerName string, start bool) (string, error) {
-	// Get the ID of the container by name
-	containerID, err := getContainerIDByName(containerName)
-	if err != nil {
-		return "", err
-	}
-
-	// Stop the container using `docker stop <containerID>`
-	var command string
-	if start {
-		command = "start"
-	} else {
-		command = "stop"
-	}
-	cmd := exec.Command("docker", command, containerID)
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
-	return containerID, nil
-}
-func stopContainerByName(containerName string) (string, error) {
-	cid, err := stopOrStartContainerByName(containerName, false)
-	if err != nil {
-		return "", err
-	}
-	return cid, nil
-}
-func startContainerByName(containerName string) (string, error) {
-	cid, err := stopOrStartContainerByName(containerName, true)
-	if err != nil {
-		return "", err
-	}
-	return cid, nil
+func (c ExecClusterPeer) LaunchNode() string {
+	go c.launchNodeImpl()
+	return <-*c.PeerIdChannel
 }
 
 // StopNode stops the IPFS cluster node by stopping the Docker containers associated with the peer.
-func (c *IpfsClusterPeer) StopNode() error {
+func (c ExecClusterPeer) StopNode() error {
 	// Stop the containers by name
 	if _, err := stopContainerByName(c.GetIpfsContainerName()); err != nil {
 		return err
@@ -291,9 +142,9 @@ func (c *IpfsClusterPeer) StopNode() error {
 }
 
 // StartNode starts the IPFS cluster node by launching the Docker containers associated with the peer.
-func (c *IpfsClusterPeer) StartNode() error {
+func (c ExecClusterPeer) StartNode() error {
 	// Launch the containers by generating and running the Docker Compose file
-	if err := c.LaunchNode(); err != nil {
+	if err := c.launchNodeImpl(); err != nil {
 		return err
 	}
 	_, err := startContainerByName(c.GetIpfsContainerName())
@@ -309,7 +160,7 @@ func (c *IpfsClusterPeer) StartNode() error {
 	return nil
 }
 
-func (c *IpfsClusterPeer) GetFile(cid string) error {
+func (c ExecClusterPeer) GetFile(cid string) error {
 	var ctlCmd *exec.Cmd
 	if c.erasureEnabled {
 		ctlCmd = exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "ecget", cid)
@@ -331,13 +182,13 @@ func (c *IpfsClusterPeer) GetFile(cid string) error {
 	return nil
 }
 
-func (c *IpfsClusterPeer) ClearIPFSCache() error {
+func (c ExecClusterPeer) ClearIPFSCache() error {
 	cmd := exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "ipfs", "gc")
 	_, err := executeCommandWithTimeout(cmd, c.runenv.IntParam("clearIpfsCacheTimeout"), fmt.Errorf("clear IPFS Cache Timed Out"))
 	return err
 }
 
-func (c *IpfsClusterPeer) PrintPinnedFiles(fileName string) error {
+func (c ExecClusterPeer) PrintPinnedFiles(fileName string) error {
 	cmd := exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "status", "--filter", "pinned")
 	out, err := executeCommandWithTimeout(cmd, 15, fmt.Errorf("ipfs-cluster-ctl status --filter pinned: timed out"))
 
@@ -354,7 +205,7 @@ func (c *IpfsClusterPeer) PrintPinnedFiles(fileName string) error {
 
 // PinFile adds a file to the IPFS cluster using ipfs-cluster-ctl.
 // The 'filePath' parameter specifies the path of the file to add.
-func (c *IpfsClusterPeer) PinFile(filePath string) (*ECFile, error) {
+func (c ExecClusterPeer) PinFile(filePath string) (*ECFile, error) {
 	// Check if the file exists
 	_, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
@@ -396,8 +247,156 @@ func (c *IpfsClusterPeer) PinFile(filePath string) (*ECFile, error) {
 	return ecFile, nil
 }
 
-func executeCommand(ctlCmd *exec.Cmd) (string, error) {
-	return executeCommandWithTimeout(ctlCmd, 60*10, fmt.Errorf("timed out"))
+// NewExecClusterPeer creates a new IpfsClusterPeerHelper instance - if bootstrap id is blank/nil, we are assumed to be the first peer
+func NewExecClusterPeer(peerNumber int, runenv *runtime.RunEnv, bootstrapId string) (ClusterPeer, error) {
+	if peerNumber != 1 && bootstrapId == "" {
+		return nil, fmt.Errorf("peer %d requires a bootstrapId", peerNumber)
+	}
+	// Read the template file
+	var bootstrapOnId string = bootstrapId
+	var templateContent string
+	if peerNumber == 1 {
+		templateContent = ComposeTempaltePeer0
+	} else {
+		templateContent = ComposeTemplatePeerN
+	}
+	c := make(chan string)
+	return ExecClusterPeer{
+		PeerNumber:     peerNumber,
+		Template:       string(templateContent),
+		runenv:         runenv,
+		PeerIdChannel:  &c,
+		bootstrapOnId:  bootstrapOnId,
+		erasureEnabled: runenv.BooleanParam("erasureEnabled"),
+	}, nil
+}
+
+// writeToFile writes the generated compose content to a file named docker-compose.yml in a directory named after the peer number
+func (c ExecClusterPeer) writeToFile(content string) error {
+	// Create a directory named after the peer number
+	dirName := c.getPeerDockerDirectory()
+	if err := os.MkdirAll(dirName, 0755); err != nil {
+		return err
+	}
+	// if c.runenv.RunParams.BooleanParam("verbose") {
+	// 	c.runenv.RecordMessage(content)
+	// } // Write the compose content to docker-compose.yml in the created directory
+	return os.WriteFile(fmt.Sprintf("%s/docker-compose.yml", dirName), []byte(content), 0644)
+}
+
+// generateComposeFile generates a Docker Compose file content based on the peer number
+func (c ExecClusterPeer) generateComposeFile() error {
+	composeContent := strings.ReplaceAll(c.Template, "{{PEER_NUMBER}}", strconv.Itoa(c.PeerNumber))
+	composeContent = strings.ReplaceAll(composeContent, "{{PEER_IPFS_PORT}}", strconv.Itoa(c.GetPeerIpfsPort()))
+	composeContent = strings.ReplaceAll(composeContent, "{{PEER_CLUSTER_PORT}}", strconv.Itoa(c.GetPeerClusterPort()))
+	composeContent = strings.ReplaceAll(composeContent, "{{PEER_SWARM_PORT}}", strconv.Itoa(c.GetPeerSwarmPort()))
+	composeContent = strings.ReplaceAll(composeContent, "{{PEER_GATEWAY_PORT}}", strconv.Itoa(c.GetPeerGatewayPort()))
+
+	var imageName string = "ipfs/ipfs-cluster:latest"
+	if c.erasureEnabled {
+		imageName = "ipfs-cluster-erasure:latest"
+	}
+	composeContent = strings.ReplaceAll(composeContent, "$IMAGE_NAME$", imageName)
+	if c.bootstrapOnId != "" {
+		peer := fmt.Sprintf("/dns4/%s/tcp/9096/ipfs/%s", fmt.Sprintf("cluster%d", 1), c.bootstrapOnId)
+		composeContent = strings.ReplaceAll(composeContent, "{{BOOTSTRAP_PEER}}", peer)
+	}
+
+	return c.writeToFile(composeContent)
+}
+func (c ExecClusterPeer) getAnyPort(base int) int {
+	// Ensure peerNumber is within the range of 1 to 99
+	subport := (c.PeerNumber + 99) % 100
+	// Add a base port number to the peerNumber to get a unique port
+	port := base + subport
+	return port + 1
+}
+
+// extractPeerID extracts the peer ID from a line that contains "IPFS is ready. Peer ID" pattern
+func extractPeerID(line string) string {
+	// Split the line by spaces
+	parts := strings.Split(line, " ")
+	for i, part := range parts {
+		// Check if the current part is "Peer" and the next part exists
+		if part == "ID:" && i+1 < len(parts) {
+			return strings.TrimSpace(parts[i+1]) // Return the next part (peer ID)
+		}
+	}
+	return ""
+}
+
+func getContainerIDByName(containerName string) (string, error) {
+	// Run `docker ps -aq --filter "name=<containerName>"` to get the container ID
+	cmd := exec.Command("docker", "ps", "-aq", "--filter", "name="+containerName)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	// Trim any leading or trailing whitespace from the output
+	containerID := strings.TrimSpace(string(output))
+
+	if containerID == "" {
+		return "", fmt.Errorf("container '%s' not found", containerName)
+	}
+
+	return containerID, nil
+}
+
+func stopOrStartContainerByName(containerName string, start bool) (string, error) {
+	// Get the ID of the container by name
+	containerID, err := getContainerIDByName(containerName)
+	if err != nil {
+		return "", err
+	}
+
+	// Stop the container using `docker stop <containerID>`
+	var command string
+	if start {
+		command = "start"
+	} else {
+		command = "stop"
+	}
+	cmd := exec.Command("docker", command, containerID)
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return containerID, nil
+}
+func stopContainerByName(containerName string) (string, error) {
+	cid, err := stopOrStartContainerByName(containerName, false)
+	if err != nil {
+		return "", err
+	}
+	return cid, nil
+}
+func startContainerByName(containerName string) (string, error) {
+	cid, err := stopOrStartContainerByName(containerName, true)
+	if err != nil {
+		return "", err
+	}
+	return cid, nil
+}
+func killContainer(containerName string) error {
+	// Get the ID of the container by name
+	containerID, err := getContainerIDByName(containerName)
+	if err != nil {
+		return err
+	}
+
+	// Kill the container using `docker kill <containerID>`
+	cmd := exec.Command("docker", "kill", containerID)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Delete the container using `docker rm <containerID>`
+	cmd = exec.Command("docker", "rm", containerID)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	return nil
 }
 func executeCommandWithTimeout(ctlCmd *exec.Cmd, timeoutSeconds int, timeoutError error) (string, error) {
 	// Channel to signal when the operation is completed
@@ -421,4 +420,9 @@ func executeCommandWithTimeout(ctlCmd *exec.Cmd, timeoutSeconds int, timeoutErro
 
 		return "", timeoutError
 	}
+}
+
+// the directory name where this peer's docker-compose.yml file will live
+func (c ExecClusterPeer) getPeerDockerDirectory() string {
+	return fmt.Sprintf("peer%d", c.PeerNumber)
 }
