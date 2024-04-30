@@ -14,11 +14,6 @@ import (
 	"github.com/testground/sdk-go/runtime"
 )
 
-// BaseTemplateFile is the path to the template file
-const BaseTemplateFile = "/home/jake/ipfs-erasure-testing/ipfs-cluster-peer/cluster-peer-compose-template.yml"
-const Peer0TemplateFile = "/home/jake/ipfs-erasure-testing/ipfs-cluster-peer/cluster-peer0-compose-template.yml"
-const TestFileDirectory = "/home/jake/ipfs-erasure-testing/test_files"
-
 type IpfsClusterPeer struct {
 	PeerNumber int
 	Template   string // Template field to store the compose template content
@@ -38,15 +33,11 @@ func New(peerNumber int, runenv *runtime.RunEnv, bootstrapId string) (*IpfsClust
 	}
 	// Read the template file
 	var bootstrapOnId string = bootstrapId
-	var template string
+	var templateContent string
 	if peerNumber == 1 {
-		template = Peer0TemplateFile
+		templateContent = ComposeTempaltePeer0
 	} else {
-		template = BaseTemplateFile
-	}
-	templateContent, err := os.ReadFile(template)
-	if err != nil {
-		return nil, err
+		templateContent = ComposeTemplatePeerN
 	}
 	c := make(chan string)
 	return &IpfsClusterPeer{
