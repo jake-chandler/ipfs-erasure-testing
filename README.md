@@ -10,6 +10,11 @@ Before you begin, ensure that you have met the following requirements:
 3. Install Testground. See: https://github.com/testground/testground
 4. Build the ipfs-cluster-erasure docker image. See: https://github.com/loomts/ipfs-cluster-erasure-example
 5. Import the Test plans: `testground plan import --from ipfs-erasure-testing`
+6. Run the plan: `testground run single          --plan=ipfs-erasure-testing          --testcase=test2          --builder=exec:go          --runner=local:exec          --instances=3 --tp=erasureEnabled=true          --wait`
+
+### Tips
+- Check out `manifest.toml` to see test plan parameters
+
 
 ## Supported Builders / Runners
 - As of 4/25/2024, the only supported builder/runner is `exec:go` and `local:exec`, respectively
