@@ -34,24 +34,21 @@ const (
 
 // Peer 2...N logic
 func simulateFailureStates(ctx context.Context, runenv *runtime.RunEnv, peerNum int64, shutdownProb float64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
-
-	alreadyShutdown := false
-
-	runenv.RecordMessage("Checking For Failure state...")
 	if runtimeMonitor.IsCancel() {
 		runenv.RecordMessage("Peer #%d: Max Runtime Exceed", peerNum)
 		return nil
 	}
 	filesinsertedState := sync.State("filesinserted")
-	if !alreadyShutdown && rand.Float64() < shutdownProb {
-		alreadyShutdown = true
+	if rand.Float64() < shutdownProb {
 		err := shutDownPeer(ctx, runenv, peerNum, clusterHelper, client)
 		if err != nil {
 			return err
 		}
 		<-client.MustBarrier(ctx, filesinsertedState, Stage_WaitForFilesToBeRetrieved).C
-		runenv.RecordMessage("Peer #%d is starting again...", peerNum)
-		go clusterHelper.StartNode()
+		if runenv.BooleanParam("tearDown") {
+			runenv.RecordMessage("Peer #%d is starting again...", peerNum)
+			go clusterHelper.StartNode()
+		}
 		time.Sleep(time.Second * 5)
 
 	} else {
@@ -65,6 +62,7 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterp
 	fg := filegenerator.New()
 	maxFiles := runenv.IntParam("maxFiles")
 	fileSizeMB := runenv.IntParam("fileSizeMB")
+	fileSizeIncreaseScale := runenv.IntParam("fileSizeIncrease")
 	totalFilesInserted := 0
 	var insertedCids []string
 	for i := 0; i < maxFiles; i++ {
@@ -77,15 +75,19 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterp
 		fileName := fg.GenerateFilename()
 		fileName, err := fg.GenerateFile(fileName, fileSizeMB)
 		if err != nil {
-			runenv.RecordFailure(fmt.Errorf("error generating file: %s", err))
+			runenv.RecordMessage(fmt.Sprintf("error generating file: %s", err))
 			break
 		}
 		start := time.Now()
-		// insert the generated file
+		// pin the generated file
 		runenv.RecordMessage("File %s:%dMB inserting...", fileName, fileSizeMB)
 		ecfile, err := clusterHelper.PinFile(fileName)
 		duration := time.Since(start)
 		if err != nil {
+			if runtimeMonitor.IsCancel() {
+				runenv.RecordMessage("Peer #%d: Max Runtime Exceed", clusterHelper.PeerNumber)
+				break
+			}
 			runenv.RecordMessage("error inserting file to cluster: %s... waiting 1 minute to try again", err)
 			time.Sleep(1 * time.Minute)
 		} else {
@@ -98,6 +100,7 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterp
 			}
 			time.Sleep(time.Duration(10 * time.Second))
 		}
+		fileSizeMB = fileSizeMB * fileSizeIncreaseScale
 
 	}
 	// if runtimeMonitor.IsDebug() {
@@ -142,17 +145,17 @@ func runinsertQueryFilesTest(runenv *runtime.RunEnv, clusterHelper *ipfsclusterp
 }
 
 func Test2(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
-
 	// initialize the runtime monitor
 	runtimeMonitor = monitor.NewMonitor(time.Duration(runenv.IntParam("maxRuntimeMinutes"))*time.Minute, runenv.BooleanParam("verbose"))
 	// monitor thread keeps track of total program runtime.
 	go runtimeMonitor.Start()
-
 	clusterHelper, err := bootstrapAllPeers(ctx, initCtx, enrolledState, runenv)
 	if err != nil {
 		return err
 	}
-	defer clusterHelper.TearDown()
+	if runenv.BooleanParam("tearDown") {
+		defer clusterHelper.TearDown()
+	}
 
 	shutdownProb := runenv.FloatParam("shutdownProbability")
 	runtimeMonitor.Debug(fmt.Sprintf("Peer %d Shutdown Probability %f", peerNum, shutdownProb))
