@@ -7,14 +7,17 @@ Before you begin, ensure that you have met the following requirements:
 
 1. Install *Golang 1.16+*
 2. Ensure Docker Daemon is running
+3. A docker network called `ipfsnet`
 3. Install Testground. See: https://github.com/testground/testground
 4. Build the ipfs-cluster-erasure docker image. See: https://github.com/loomts/ipfs-cluster-erasure-example
-5. Import the Test plans: `testground plan import --from ipfs-erasure-testing`
-6. Run the plan: `testground run single          --plan=ipfs-erasure-testing          --testcase=test2          --builder=exec:go          --runner=local:exec          --instances=3 --tp=erasureEnabled=true          --wait`
+5. Clone this repository
+6. Import the Test plans: `testground plan import --from ipfs-erasure-testing`
+7. Run the plan: `testground run single          --plan=ipfs-erasure-testing          --testcase=test2          --builder=exec:go          --runner=local:exec          --instances=3 --tp=erasureEnabled=true          --wait`
 
 ### Tips
 - Check out `manifest.toml` to see test plan parameters
-
+- Always launch the test plans from this projects directory.
+### Pre Built Test Case Configurations
 
 ## Supported Builders / Runners
 - As of 4/25/2024, the only supported builder/runner is `exec:go` and `local:exec`, respectively
