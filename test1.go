@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -28,12 +29,36 @@ const (
 	FailurePlanStep_StartupComplete  = 4
 )
 
+func mustBarrierWithFailureState(state sync.State, target int, duration time.Duration) error {
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	defer cancel() // Make sure to cancel the context to release resources
+
+	// Create a channel to receive the signal
+	signal := client.MustBarrier(ctx, state, target).C
+	failure := client.MustBarrier(ctx, sync.State("failure"), 1).C
+	// Wait for either the signal or timeout
+	select {
+	case <-signal:
+		// Received signal, proceed with shutdown
+		return nil
+	case <-failure:
+		// Timeout occurred, handle accordingly (e.g., log, return, etc.)
+		// Here you can decide what to do if the timeout is reached before receiving the signal
+		return fmt.Errorf("other node(s) have failed")
+	}
+}
+
 func enterFailureStepPlan(runenv *runtime.RunEnv, peerNum int64, clusterHelper *ipfsclusterpeer.IpfsClusterPeer, client sync.Client) error {
 	enterFailureState := sync.State(fmt.Sprintf("Peer%dShutdown", peerNum))
 	// wait for peer # 1 to signal this peer to shut down
-	<-client.MustBarrier(ctx, enterFailureState, FailurePlanStep_InitiateShutdown).C
+	maxTimeout := runtimeMonitor.MaxRuntime - runtimeMonitor.GetElapsedTime()
+	err := mustBarrierWithFailureState(enterFailureState, FailurePlanStep_InitiateShutdown, maxTimeout)
+	if err != nil {
+		return err
+	}
 	// shut down the peer
-	err := shutDownPeer(ctx, runenv, peerNum, clusterHelper, client)
+	err = shutDownPeer(ctx, runenv, peerNum, clusterHelper, client)
 	if err != nil {
 		return err
 	}
@@ -41,7 +66,8 @@ func enterFailureStepPlan(runenv *runtime.RunEnv, peerNum int64, clusterHelper *
 	client.SignalEntry(ctx, enterFailureState)
 	runtimeMonitor.Log("Init Shutdown Complete")
 	// wait for peer 1 to tell us to start the node again
-	<-client.MustBarrier(ctx, enterFailureState, FailurePlanStep_InitiateStartup).C
+	maxTimeout = runtimeMonitor.MaxRuntime - runtimeMonitor.GetElapsedTime()
+	mustBarrierWithFailureState(enterFailureState, FailurePlanStep_InitiateStartup, maxTimeout)
 	go clusterHelper.StartNode()
 	time.Sleep(5 * time.Second)
 	// inform peer 1 that we have started the node again.
@@ -63,8 +89,10 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	if err != nil {
 		return err
 	}
-	defer clusterHelper.TearDown()
-	topic := "fileInserted"
+	if runenv.BooleanParam("tearDown") {
+		defer clusterHelper.TearDown()
+	}
+	fileInsertedTopic := "fileInserted"
 	// failureCounter := met.Counter("FileFailures")
 	// successCounter := met.Counter("FileSuccesses")
 
@@ -72,7 +100,7 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		// wait for peer 2 to insert a file.
 		var fileCID string
 		fileCidChan := make(chan string)
-		subsc := client.MustSubscribe(ctx, sync.NewTopic(topic, reflect.TypeOf(fileCID)), fileCidChan)
+		subsc := client.MustSubscribe(ctx, sync.NewTopic(fileInsertedTopic, reflect.TypeOf(fileCID)), fileCidChan)
 		subsc.Done()
 		fileCID = <-fileCidChan
 		runtimeMonitor.Debug("File CID Retrieved %s", fileCID)
@@ -85,22 +113,39 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		// 	return err
 		// }
 
+		if fileCID == "" {
+			client.SignalEntry(ctx, sync.State("failure"))
+			client.SignalEntry(ctx, testFinishedState)
+			return err
+		}
+
 		for i := runenv.TestGroupInstanceCount; i > 1; i-- {
 			enterFailureState := sync.State(fmt.Sprintf("Peer%dShutdown", i))
 			_, err = client.SignalAndWait(ctx, enterFailureState, FailurePlanStep_ShutdownComplete)
 			if err != nil {
+				client.SignalEntry(ctx, sync.State("failure"))
 				client.SignalEntry(ctx, testFinishedState)
 				return err
 			}
+			if runtimeMonitor.IsCancel() {
+				continue
+			}
 			runtimeMonitor.Log("Peer %d has shutdown... waiting 10 seconds", i)
 			time.Sleep(10 * time.Second)
-		}
-
-		err = clusterHelper.GetFile(fileCID)
-		if err != nil {
-			runtimeMonitor.Log("Error getting file %s", err)
-		} else {
-			runtimeMonitor.Log("Success getting file %s", fileCID)
+			err = clusterHelper.ClearIPFSCache()
+			if err != nil {
+				runtimeMonitor.Log("Error clearing ipfs cache: %s", err)
+			}
+			if runtimeMonitor.IsCancel() {
+				continue
+			}
+			time.Sleep(10 * time.Second)
+			err = clusterHelper.GetFile(fileCID)
+			if err != nil {
+				runtimeMonitor.Log("Error getting file %s", err)
+			} else {
+				runtimeMonitor.Log("Success getting file %s", fileCID)
+			}
 		}
 		for i := runenv.TestGroupInstanceCount; i > 1; i-- {
 			enterFailureState := sync.State(fmt.Sprintf("Peer%dShutdown", i))
@@ -147,16 +192,16 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		fileName, err := fg.GenerateFile(fileName, fileSizeMB)
 		if err != nil {
 			runenv.RecordFailure(fmt.Errorf("error generating file: %s", err))
-			return err
+			fileName = "default.txt"
 		}
 		start := time.Now()
 		// insert the generated file
 		runenv.RecordMessage("File %s:%dMB inserting...", fileName, fileSizeMB)
 		ecfile, err := clusterHelper.PinFile(fileName)
 		duration := time.Since(start)
-		if err != nil {
-			// met.RecordPoint("FileSizeMb", float64(fileSizeMB))
-			// met.RecordPoint("FailedFileinsertTime", float64(duration.Milliseconds()))
+		if err != nil || runtimeMonitor.IsCancel() {
+			// don't block other peers on error states
+			client.MustPublish(ctx, sync.NewTopic(fileInsertedTopic, reflect.TypeOf("")), "")
 			return err
 		} else {
 			runenv.RecordMessage("File %s inserted successfully in %s", fileName, duration.String())
@@ -165,10 +210,11 @@ func Test1(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 			runtimeMonitor.Debug(ecfile.PrettyPrint())
 		}
 		if ecfile.CID == "" {
+			client.MustPublish(ctx, sync.NewTopic(fileInsertedTopic, reflect.TypeOf("")), "")
 			runtimeMonitor.Debug("File CID is BLANK")
 			return fmt.Errorf("file CID is BLANK")
 		}
-		client.MustPublish(ctx, sync.NewTopic(topic, reflect.TypeOf(ecfile.CID)), ecfile.CID)
+		client.MustPublish(ctx, sync.NewTopic(fileInsertedTopic, reflect.TypeOf(ecfile.CID)), ecfile.CID)
 	}
 	if peerNum > 1 {
 		err := enterFailureStepPlan(runenv, peerNum, clusterHelper, client)

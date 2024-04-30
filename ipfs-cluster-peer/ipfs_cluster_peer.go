@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +15,9 @@ import (
 )
 
 // BaseTemplateFile is the path to the template file
-const BaseTemplateFile = "/home/jake/testground/plans/ipfstesting/compose_file_generator/cluster-peer-compose-template.yml"
-const Peer0TemplateFile = "/home/jake/testground/plans/ipfstesting/compose_file_generator/cluster-peer0-compose-template.yml"
-const TestFileDirectory = "/home/jake/testground/plans/ipfstesting/test_files"
+const BaseTemplateFile = "/home/jake/ipfs-erasure-testing/ipfs-cluster-peer/cluster-peer-compose-template.yml"
+const Peer0TemplateFile = "/home/jake/ipfs-erasure-testing/ipfs-cluster-peer/cluster-peer0-compose-template.yml"
+const TestFileDirectory = "/home/jake/ipfs-erasure-testing/test_files"
 
 type IpfsClusterPeer struct {
 	PeerNumber int
@@ -119,9 +118,9 @@ func (c *IpfsClusterPeer) writeToFile(content string) error {
 	if err := os.MkdirAll(dirName, 0755); err != nil {
 		return err
 	}
-	if c.runenv.RunParams.BooleanParam("verbose") {
-		c.runenv.RecordMessage(content)
-	} // Write the compose content to docker-compose.yml in the created directory
+	// if c.runenv.RunParams.BooleanParam("verbose") {
+	// 	c.runenv.RecordMessage(content)
+	// } // Write the compose content to docker-compose.yml in the created directory
 	return os.WriteFile(fmt.Sprintf("%s/docker-compose.yml", dirName), []byte(content), 0644)
 }
 
@@ -185,9 +184,9 @@ func (c *IpfsClusterPeer) TearDown() error {
 		}
 	}
 	c.runenv.RecordMessage("Peer %d: Successfully Terminated Containers", c.PeerNumber)
-	o, _ := executeCommand(exec.Command("pwd"))
-	c.runenv.RecordMessage("\npwd output:\n\n")
-	c.runenv.RecordMessage(o)
+	// o, _ := executeCommand(exec.Command("rm", "-rf", "*"))
+	// // c.runenv.RecordMessage("\npwd output:\n\n")
+	// // c.runenv.RecordMessage(o)
 	return nil
 }
 
@@ -195,7 +194,6 @@ func (c *IpfsClusterPeer) LaunchNode() error {
 	err := c.GenerateComposeFile()
 	if err != nil {
 		c.runenv.RecordMessage("Failure generating compose file")
-		c.runenv.RecordFailure(err)
 		return err
 	}
 	err = os.Chdir(c.GetPeerDockerDirectory())
@@ -208,15 +206,16 @@ func (c *IpfsClusterPeer) LaunchNode() error {
 	stdout, err := cmd.StderrPipe()
 	if err != nil {
 		*c.PeerIdChannel <- ""
-		c.runenv.RecordFailure(err)
 		return fmt.Errorf("error creating stdout pipe: %s", err)
 	}
+	var outblder strings.Builder
 
 	// Read command output line by line and send it to the output channel
 	reader := bufio.NewReader(stdout)
 	go func() {
 		for {
 			line, err := reader.ReadString('\n')
+			outblder.WriteString(line + "\n")
 			if err != nil {
 				if err != io.EOF {
 					*c.PeerIdChannel <- ""
@@ -237,13 +236,13 @@ func (c *IpfsClusterPeer) LaunchNode() error {
 	}()
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		c.runenv.RecordFailure(err)
+		c.runenv.RecordFailure(fmt.Errorf("failure composing file: %s ", outblder.String()))
 		*c.PeerIdChannel <- ""
 		return fmt.Errorf("error starting command: %s", err)
 	}
 	// Wait for the command to finish
 	if err := cmd.Wait(); err != nil {
-		c.runenv.RecordFailure(err)
+		c.runenv.RecordFailure(fmt.Errorf("failure composing file:\n %s ", outblder.String()))
 		*c.PeerIdChannel <- ""
 		return err
 	}
@@ -324,33 +323,32 @@ func (c *IpfsClusterPeer) GetFile(cid string) error {
 	if c.erasureEnabled {
 		ctlCmd = exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "ecget", cid)
 	} else {
-		ctlCmd = exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "get", cid)
+		ctlCmd = exec.Command("docker", "exec", c.GetIpfsContainerName(), "ipfs", "get", cid)
 	}
 
-	timeout := c.runenv.IntParam("getFileTimeout")
-	out, err := executeCommandWithTimeout(ctlCmd, timeout, fmt.Errorf("timout retrieving file %s", cid))
-	c.runenv.RecordMessage("\n\nOUTPUT\n\n%s", out)
+	timeout := c.runenv.IntParam("fileGetTimeout")
+
+	o, err := executeCommandWithTimeout(ctlCmd, timeout, fmt.Errorf("timout retrieving file %s", cid))
 	if err != nil {
-		return err
+		return fmt.Errorf(o + "\n" + fmt.Sprintf("\n%s", err))
 	}
 
-	_, e := exec.Command("docker", "exec", c.GetClusterContainerName(), "ls", "-la").CombinedOutput()
-	if e != nil {
-		return e
-	}
+	// out, e := exec.Command("docker", "exec", c.GetClusterContainerName(), "ls", "-la").CombinedOutput()
+	// if e != nil {
+	// 	return fmt.Errorf(string(out) + "\n" + fmt.Sprintf("\n%s", e))
+	// }
 	return nil
 }
 
 func (c *IpfsClusterPeer) ClearIPFSCache() error {
 	cmd := exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "ipfs", "gc")
-	_, err := executeCommandWithTimeout(cmd, 10, fmt.Errorf("clear IPFS Cache Timed Out"))
+	_, err := executeCommandWithTimeout(cmd, c.runenv.IntParam("clearIpfsCacheTimeout"), fmt.Errorf("clear IPFS Cache Timed Out"))
 	return err
 }
 
 func (c *IpfsClusterPeer) PrintPinnedFiles(fileName string) error {
 	cmd := exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "status", "--filter", "pinned")
 	out, err := executeCommandWithTimeout(cmd, 15, fmt.Errorf("ipfs-cluster-ctl status --filter pinned: timed out"))
-	c.runenv.RecordMessage("PrintPinnedFilesO")
 
 	s, _ := os.Getwd()
 	c.runenv.RecordMessage(s)
@@ -381,13 +379,13 @@ func (c *IpfsClusterPeer) PinFile(filePath string) (*ECFile, error) {
 	// Execute ipfs-cluster-ctl add command inside the IPFS container\
 	var ctlCmd *exec.Cmd
 	if c.erasureEnabled {
-		ctlCmd = exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "add", "/data/"+filepath.Base(filePath), "--erasure", "--shard-size", "512000")
+		ctlCmd = exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "add", "/data/"+filepath.Base(filePath), "--erasure")
 	} else {
 		ctlCmd = exec.Command("docker", "exec", c.GetClusterContainerName(), "ipfs-cluster-ctl", "add", "/data/"+filepath.Base(filePath))
 	}
 
 	// Wait for the operation to complete or timeout
-	timeout := c.runenv.IntParam("fileUpsertTimeout")
+	timeout := c.runenv.IntParam("filePinTimeout")
 	// Execute the command and capture output/errors
 	// Signal that the operation is completed
 	// Command execution completed
@@ -397,7 +395,6 @@ func (c *IpfsClusterPeer) PinFile(filePath string) (*ECFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.runenv.RecordMessage(out)
 	var ecFile *ECFile
 	if c.erasureEnabled {
 		ecFile = newECFileFromOutput(out)
@@ -420,14 +417,13 @@ func executeCommandWithTimeout(ctlCmd *exec.Cmd, timeoutSeconds int, timeoutErro
 		defer close(done)
 
 		output, cmdErr = ctlCmd.CombinedOutput()
-		log.Printf("\n\nRAWOUTPUT:\n\n%s", output)
 		done <- struct{}{}
 	}()
 
 	select {
 	case <-done:
 		if cmdErr != nil {
-			return "", cmdErr
+			return "", fmt.Errorf(string(output)+"\n%s", cmdErr)
 		}
 		return string(output), nil
 	case <-time.After(time.Duration(timeoutSeconds) * time.Second):

@@ -27,37 +27,45 @@ name= "test1"
 instances = { min = 3, max = 50, default = 3 }
     [testcases.params]
     verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=false }
-
-    erasureEnabled = { type = "boolean", desc = "Use IPFS-Cluster with Erasure Coding enabled.", unit = "boolean", default=true }
-
-    shutdownProbability = { type = "float", desc = "Shutdown Probability", unit = "percentage", default=0.25 }
-
-
-    maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "time_minutes", default=9 }
-
-    fileUpsertTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=180 }
-
-    fileSizeMB =  { type = "int", desc = "Size of file to upsert", unit = "MB", default=1000 }
-
-    getFileTimeout =  { type = "int", desc = "Maximum amount of time a file retrieval operation can take before failure.", unit = "time_seconds", default=240 }
-
-[[testcases]]
-name= "test2"
-instances = { min = 1, max = 50, default = 1 }
-    [testcases.params]
-    verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=true }
-
+    tearDown = { type = "boolean", desc = "shut down nodes before test termination. typically set to false during debugging", unit = "boolean", default=true }
+    maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "minutes", default=9 }
     erasureEnabled = { type = "boolean", desc = "Use IPFS-Cluster with Erasure Coding enabled.", unit = "boolean", default=false }
 
     shutdownProbability = { type = "float", desc = "Shutdown Probability", unit = "percentage", default=0.25 }
+    clearIpfsCacheTimeout = { type = "int", desc = "Maximum Node Runtime", unit = "seconds", default=60 }
+    filePinTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=240 }
+    fileGetTimeout =  { type = "int", desc = "Maximum amount of time a file retrieval operation can take before failure.", unit = "time_seconds", default=240 }
 
-    maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "time_minutes", default=5 }
+    fileSizeMB =  { type = "int", desc = "Size of file to upsert", unit = "MB", default=1000 }
 
+[[testcases]]
+name= "test2"
+instances = { min = 1, max = 50, default = 3 }
+    [testcases.params]
+    verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=true }
 
-    fileUpsertTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=180 }
+    erasureEnabled = { type = "boolean", desc = "Use IPFS-Cluster with Erasure Coding enabled.", unit = "boolean", default=true }
 
-    maxFiles = { type = "int", desc = "Maximum # of files to upsert.", unit = "time_seconds", default=1 }
+    shutdownProbability = { type = "float", desc = "Shutdown Probability. 1.0 = 100% chance to shutdown", unit = "decimal", default=1.0 }
+
+    maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "minutes", default=5 }
+    clearIpfsCacheTimeout = { type = "int", desc = "Maximum Node Runtime", unit = "seconds", default=60 }
+
+    filePinTimeout = { type = "int", desc = "Maximum amount of time a file upsert operation can take before failure.", unit = "time_seconds", default=180 }
+
+    maxFiles = { type = "int", desc = "Maximum # of files to upsert.", unit = "time_seconds", default=2 }
 
     fileSizeMB =  { type = "int", desc = "Size of file to upsert", unit = "MB", default=50 }
+    fileSizeIncrease = { type="int", desc="file size scale factor", unit="scale", default=2 }
+    fileGetTimeout =  { type = "int", desc = "Maximum amount of time a file retrieval operation can take before failure.", unit = "time_seconds", default=240 }
+    tearDown = { type = "boolean", desc = "shut down nodes before test termination. typically set to false during debugging", unit = "verbose", default=true }
 
-    getFileTimeout =  { type = "int", desc = "Maximum amount of time a file retrieval operation can take before failure.", unit = "time_seconds", default=240 }
+[[testcases]]
+name= "onlybootstrap"
+instances = { min = 1, max = 50, default = 3 }
+    [testcases.params]
+    verbose = { type = "boolean", desc = "enable verbose logging", unit = "verbose", default=true }
+    maxRuntimeMinutes = { type = "int", desc = "Maximum Node Runtime", unit = "minutes", default=5 }
+    tearDown = { type = "boolean", desc = "shut down nodes before test termination. typically set to false during debugging", unit = "verbose", default=true }
+    clearIpfsCacheTimeout = { type = "int", desc = "Maximum Node Runtime", unit = "seconds", default=60 }
+
